@@ -8,8 +8,8 @@ Endpoint: https://prepaid.desco.org.bd/api/unified/customer/getBalance?accountNo
 	    "code": 200,
 	    "desc": "OK",
 	    "data": {
-	        "accountNo": "41378832",
-	        "meterNo": "030410113677",
+	        "accountNo": "########",
+	        "meterNo": "############",
 	        "balance": 3396.89,
 	        "currentMonthConsumption": 3643.23191,
 	        "readingTime": "2026-04-28"
