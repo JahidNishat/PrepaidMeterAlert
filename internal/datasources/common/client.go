@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -54,14 +55,20 @@ func (c *Client) Do(ctx context.Context, method, path string, headers http.Heade
 			return err
 		}
 
+		slog.DebugContext(ctx, "http request", "method", method, "url", url, "attempt", i+1)
+
 		resp, err := c.client.Do(req)
 		if err != nil {
 			lastErr = err
+			slog.WarnContext(ctx, "http request failed", "method", method, "url", url, "attempt", i+1, "error", err)
 			continue
 		}
 
-		lastErr = readResponse(resp, dst)
-		if !isTransient(resp.StatusCode) {
+		status := resp.StatusCode
+		lastErr = readResponse(ctx, resp, dst)
+		if isTransient(status) {
+			slog.WarnContext(ctx, "transient response, retrying", "method", method, "url", url, "status", status, "attempt", i+1)
+		} else {
 			break
 		}
 	}
@@ -76,7 +83,10 @@ func buildRequest(ctx context.Context, method, url string, headers http.Header, 
 		if err != nil {
 			return nil, fmt.Errorf("marshal request body: %w", err)
 		}
+		slog.DebugContext(ctx, "request body", "body", string(b))
 		r = bytes.NewReader(b)
+	} else {
+		slog.DebugContext(ctx, "request body", "body", nil)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, r)
@@ -96,17 +106,30 @@ func buildRequest(ctx context.Context, method, url string, headers http.Header, 
 	return req, nil
 }
 
-func readResponse(resp *http.Response, dst any) error {
+func readResponse(ctx context.Context, resp *http.Response, dst any) error {
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("upstream %d: %s", resp.StatusCode, bytes.TrimSpace(b))
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
 	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body := string(bytes.TrimSpace(b))
+		slog.ErrorContext(ctx, "http error response", "status", resp.StatusCode, "body", body)
+		return fmt.Errorf("upstream %d: %s", resp.StatusCode, body)
+	}
+
+	var bodyLog any = nil
+	if len(b) > 0 {
+		bodyLog = string(b)
+	}
+	slog.DebugContext(ctx, "response body", "body", bodyLog)
+
 	if dst == nil {
 		return nil
 	}
-	return json.NewDecoder(resp.Body).Decode(dst)
+	return json.NewDecoder(bytes.NewReader(b)).Decode(dst)
 }
 
 func isTransient(status int) bool {
