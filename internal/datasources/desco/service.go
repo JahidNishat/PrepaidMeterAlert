@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/m4hi2/MeterAlertBot/internal/datasources/common"
+	"github.com/m4hi2/MeterAlertBot/internal/datasources"
 )
 
 const (
@@ -21,12 +21,12 @@ const (
 )
 
 type Service struct {
-	client *common.Client
+	client *datasources.Client
 }
 
 func NewService() *Service {
 	return &Service{
-		client: common.NewClient(&common.ClientConfig{
+		client: datasources.NewClient(&datasources.ClientConfig{
 			BasePath:   basePath,
 			Timeout:    10 * time.Second,
 			Retry:      3,
@@ -35,8 +35,8 @@ func NewService() *Service {
 	}
 }
 
-func (s *Service) GetBalance(ctx context.Context, id common.Identifier) (common.Balance, error) {
-	ctx = context.WithValue(ctx, common.CtxKeyDatasource, common.CtxDatasourceDesco)
+func (s *Service) GetBalance(ctx context.Context, id datasources.Identifier) (datasources.Balance, error) {
+	ctx = context.WithValue(ctx, datasources.CtxKeyDatasource, datasources.CtxDatasourceDesco)
 
 	q := url.Values{}
 	q.Set(paramAccountNo, id.AccountNumber)
@@ -45,14 +45,14 @@ func (s *Service) GetBalance(ctx context.Context, id common.Identifier) (common.
 
 	var resp GetBalanceResp
 	if err := s.client.Do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
-		return common.Balance{}, fmt.Errorf("get balance: %w", err)
+		return datasources.Balance{}, fmt.Errorf("get balance: %w", err)
 	}
 
 	if resp.Code != http.StatusOK {
-		return common.Balance{}, fmt.Errorf("get balance: upstream code %d: %s", resp.Code, resp.Desc)
+		return datasources.Balance{}, fmt.Errorf("get balance: upstream code %d: %s", resp.Code, resp.Desc)
 	}
 
-	return common.Balance{
+	return datasources.Balance{
 		Identifier: id,
 		Balance:    resp.Data.Balance,
 	}, nil

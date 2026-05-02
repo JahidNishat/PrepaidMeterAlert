@@ -1,4 +1,4 @@
-package common
+package datasources
 
 const (
 	CtxKeyDatasource   = "datasource"

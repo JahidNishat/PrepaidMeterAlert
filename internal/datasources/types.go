@@ -1,4 +1,4 @@
-package common
+package datasources
 
 type Identifier struct {
 	AccountNumber string

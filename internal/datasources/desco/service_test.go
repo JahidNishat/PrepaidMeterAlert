@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/m4hi2/MeterAlertBot/internal/datasources/common"
+	"github.com/m4hi2/MeterAlertBot/internal/datasources"
 )
 
 func TestGetBalance_Real(t *testing.T) {
-	id := common.Identifier{
+	id := datasources.Identifier{
 		AccountNumber: "41378832",
 		// MeterNumber:   "METER001",
 	}
