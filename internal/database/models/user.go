@@ -1,5 +1,7 @@
 package models
 
+import "github.com/uptrace/bun"
+
 type Platform string
 
 const (
@@ -7,6 +9,8 @@ const (
 )
 
 type User struct {
+	bun.BaseModel `bun:"table:users"`
+
 	TimeStampedModel
 
 	Platform   Platform `bun:"platform,notnull,type:varchar(10)"`
