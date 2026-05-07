@@ -7,12 +7,11 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type Provider string
+type ProviderCode string
 
 const (
-	ProviderDESCO Provider = "desco"
-	ProviderNESCO Provider = "nesco"
-	ProviderDPDC  Provider = "dpdc"
+	ProviderCodeNESCO ProviderCode = "nesco"
+	ProviderCodeDPDC  ProviderCode = "dpdc"
 )
 
 type NotifyMode string
@@ -44,15 +43,15 @@ type Meter struct {
 
 	TimeStampedModel
 
-	UserID             uuid.UUID   `bun:"user_id,notnull,type:uuid"`
-	Provider           Provider    `bun:"provider,notnull,type:varchar(10)"`
-	MeterNumber        string      `bun:"meter_number,notnull,type:varchar(20)"`
-	AccountNumber      string      `bun:"account_number,notnull,type:varchar(20)"`
-	Nickname           string      `bun:"nickname,nullzero,type:varchar(30)"`
-	Threshold          float64     `bun:"threshold,notnull,default:100"`
-	NotifyMode         NotifyMode  `bun:"notify_mode,notnull,type:varchar(10)"`
-	Balance            float64     `bun:"balance,notnull,default:0"`
-	LastFetchAt        *time.Time  `bun:"last_fetch_at,nullzero"`
-	FetchStatus        FetchStatus `bun:"fetch_status,notnull,type:varchar(10)"`
-	NotificationStatus NStatus     `bun:"notification_status,notnull,type:varchar(10)"`
+	UserID             uuid.UUID    `bun:"user_id,notnull,type:uuid"`
+	ProviderCode       ProviderCode `bun:"provider,notnull,type:varchar(10)"`
+	MeterNumber        string       `bun:"meter_number,notnull,type:varchar(20)"`
+	AccountNumber      string       `bun:"account_number,notnull,type:varchar(20)"`
+	Nickname           string       `bun:"nickname,nullzero,type:varchar(30)"`
+	Threshold          float64      `bun:"threshold,notnull,default:100"`
+	NotifyMode         NotifyMode   `bun:"notify_mode,notnull,type:varchar(10)"`
+	Balance            float64      `bun:"balance,notnull,default:0"`
+	LastFetchAt        *time.Time   `bun:"last_fetch_at,nullzero"`
+	FetchStatus        FetchStatus  `bun:"fetch_status,notnull,type:varchar(10)"`
+	NotificationStatus NStatus      `bun:"notification_status,notnull,type:varchar(10)"`
 }
