@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: meterbot
+    ports:
+      - "5433:5432"
+    volumes:
+      # Recommended for PG 18+: mount the parent directory
+      - postgres18_data:/var/lib/postgresql
+    shm_size: 128mb
+
+volumes:
+  postgres18_data:
