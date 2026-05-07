@@ -1,4 +1,17 @@
-.PHONY: infra infra-down infra-logs
+.PHONY: infra infra-down infra-logs mcreate %
+
+mcreate:
+	@test -n "$(filter-out $@,$(MAKECMDGOALS))" || (echo "usage: make mcreate <name>"; exit 1)
+	go run . migrate create "$(filter-out $@,$(MAKECMDGOALS))"
+
+%:
+	@:
+
+migrate:
+	go run . migrate up
+
+mdown:
+	go run . migrate down
 
 infra:
 	docker compose -f docker-compose.dev.yml up -d
