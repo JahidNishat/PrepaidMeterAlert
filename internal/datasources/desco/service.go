@@ -10,6 +10,8 @@ import (
 	"github.com/m4hi2/MeterAlertBot/internal/datasources"
 )
 
+const name = "DESCO"
+
 const (
 	basePath    = "https://prepaid.desco.org.bd"
 	balancePath = "/api/unified/customer/getBalance"
@@ -22,6 +24,7 @@ const (
 
 type Service struct {
 	client *datasources.Client
+	name   string
 }
 
 func NewService() *Service {
@@ -32,6 +35,7 @@ func NewService() *Service {
 			Retry:      3,
 			RetryDelay: time.Second,
 		}),
+		name: name,
 	}
 }
 
@@ -56,4 +60,8 @@ func (s *Service) GetBalance(ctx context.Context, id datasources.Identifier) (da
 		Identifier: id,
 		Balance:    resp.Data.Balance,
 	}, nil
+}
+
+func (s *Service) Name() string {
+	return s.name
 }
