@@ -1,0 +1,81 @@
+package config
+
+import (
+	"log/slog"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/m4hi2/MeterAlertBot/internal/utils/logger"
+)
+
+type Config struct {
+	Log   LogConfig
+	DB    DBConfig
+	Desco DescoConfig
+}
+
+type LogConfig struct {
+	Level  slog.Level
+	Format logger.Format
+}
+
+type DBConfig struct {
+	DSN string
+}
+
+type DescoConfig struct {
+	BasePath   string
+	Timeout    time.Duration
+	Retry      int
+	RetryDelay time.Duration
+}
+
+func Load() *Config {
+	return &Config{
+		Log: LogConfig{
+			Level:  parseLogLevel(getEnv("MA_LOG_LEVEL", "info")),
+			Format: logger.Format(getEnv("MA_LOG_FORMAT", "json")),
+		},
+		DB: DBConfig{
+			DSN: getEnv("MA_DATABASE_URL", "postgres://myuser:mysecretpassword@localhost:5433/meterbot?sslmode=disable"),
+		},
+		Desco: DescoConfig{
+			BasePath:   getEnv("MA_DESCO_BASE_PATH", "https://prepaid.desco.org.bd"),
+			Timeout:    parseDuration(getEnv("MA_DESCO_TIMEOUT", "10s")),
+			Retry:      parseInt(getEnv("MA_DESCO_RETRY", "3")),
+			RetryDelay: parseDuration(getEnv("MA_DESCO_RETRY_DELAY", "1s")),
+		},
+	}
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func parseLogLevel(s string) slog.Level {
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(s)); err != nil {
+		return slog.LevelInfo
+	}
+	return l
+}
+
+func parseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
+func parseInt(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}

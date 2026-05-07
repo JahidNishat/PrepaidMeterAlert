@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
+	"github.com/m4hi2/MeterAlertBot/internal/config"
 	"github.com/m4hi2/MeterAlertBot/internal/datasources"
 )
 
-const name = "DESCO"
+const name = "desco"
 
-const (
-	basePath    = "https://prepaid.desco.org.bd"
-	balancePath = "/api/unified/customer/getBalance"
-)
+const balancePath = "/api/unified/customer/getBalance"
 
 const (
 	paramAccountNo = "accountNo"
@@ -24,18 +21,16 @@ const (
 
 type Service struct {
 	client *datasources.Client
-	name   string
 }
 
-func NewService() *Service {
+func NewService(cfg config.DescoConfig) *Service {
 	return &Service{
 		client: datasources.NewClient(&datasources.ClientConfig{
-			BasePath:   basePath,
-			Timeout:    10 * time.Second,
-			Retry:      3,
-			RetryDelay: time.Second,
+			BasePath:   cfg.BasePath,
+			Timeout:    cfg.Timeout,
+			Retry:      cfg.Retry,
+			RetryDelay: cfg.RetryDelay,
 		}),
-		name: name,
 	}
 }
 
@@ -63,5 +58,5 @@ func (s *Service) GetBalance(ctx context.Context, id datasources.Identifier) (da
 }
 
 func (s *Service) Name() string {
-	return s.name
+	return name
 }
