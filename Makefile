@@ -8,7 +8,7 @@ mcreate:
 	@:
 
 serve:
-	go run . serve
+	go run . serve 2>&1 | tee -a /tmp/meterbot.log
 
 migrate:
 	go run . migrate up
