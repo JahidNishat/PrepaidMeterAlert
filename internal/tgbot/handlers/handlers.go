@@ -57,6 +57,10 @@ func (h *Handlers) getOrCreateUser(ctx context.Context, sender *tele.User) (*mod
 	user = &models.User{
 		Platform:   models.PlatformTelegram,
 		PlatformID: platformID,
+		FirstName:  sender.FirstName,
+		LastName:   sender.LastName,
+		Username:   sender.Username,
+		IsBot:      sender.IsBot,
 	}
 	return user, h.userRepo.Create(ctx, user)
 }
