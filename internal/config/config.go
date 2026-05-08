@@ -14,6 +14,11 @@ type Config struct {
 	DB        DBConfig
 	Desco     DescoConfig
 	Telemetry TelemetryConfig
+	Telegram  TelegramConfig
+}
+
+type TelegramConfig struct {
+	Token string
 }
 
 type TelemetryConfig struct {
@@ -61,6 +66,9 @@ func Load() *Config {
 			OTLPEndpoint: getEnv("MA_OTLP_ENDPOINT", "localhost:4317"),
 			ServiceName:  getEnv("MA_SERVICE_NAME", "meterbot"),
 			Environment:  getEnv("MA_ENVIRONMENT", "development"),
+		},
+		Telegram: TelegramConfig{
+			Token: getEnv("MA_TELEGRAM_TOKEN", ""),
 		},
 	}
 	return instance

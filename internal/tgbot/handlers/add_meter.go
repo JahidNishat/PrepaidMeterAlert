@@ -1,0 +1,198 @@
+package handlers
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/m4hi2/MeterAlertBot/internal/database/models"
+	"github.com/m4hi2/MeterAlertBot/internal/tgbot/keyboards"
+	"github.com/m4hi2/MeterAlertBot/internal/tgbot/state"
+	tele "gopkg.in/telebot.v3"
+)
+
+func (h *Handlers) OnAddMeter(c tele.Context) error {
+	providers, err := h.providerRepo.GetActive(context.Background())
+	if err != nil {
+		return err
+	}
+	if len(providers) == 0 {
+		return c.Edit("No providers are currently available. Please try again later.", keyboards.MainMenu())
+	}
+	names := make([]string, len(providers))
+	for i, p := range providers {
+		names[i] = string(p)
+	}
+	h.state.Set(c.Sender().ID, state.Conversation{Step: state.StepAddProvider})
+	return c.Edit("Select your provider:", keyboards.ProviderMenu(names))
+}
+
+func (h *Handlers) OnProvider(c tele.Context) error {
+	conv, ok := h.state.Get(c.Sender().ID)
+	if !ok || conv.Step != state.StepAddProvider {
+		return c.Edit("Session expired. Please start over.", keyboards.MainMenu())
+	}
+	conv.Draft.Provider = c.Data()
+	conv.Step = state.StepAddNumber
+	h.state.Set(c.Sender().ID, conv)
+	return c.Edit(
+		fmt.Sprintf("✅ Provider: *%s*\n\nEnter your meter number:", strings.ToUpper(c.Data())),
+		tele.ModeMarkdown,
+		keyboards.CancelOnlyMenu(),
+	)
+}
+
+func (h *Handlers) OnSkip(c tele.Context) error {
+	conv, ok := h.state.Get(c.Sender().ID)
+	if !ok {
+		return c.Edit("Session expired. Please start over.", keyboards.MainMenu())
+	}
+	switch conv.Step {
+	case state.StepAddAccount:
+		conv.Draft.AccountNumber = ""
+		conv.Step = state.StepAddNickname
+		h.state.Set(c.Sender().ID, conv)
+		return c.Edit("Enter a nickname for this meter (optional):", keyboards.SkipOrCancelMenu())
+	case state.StepAddNickname:
+		conv.Draft.Nickname = ""
+		conv.Step = state.StepAddThreshold
+		h.state.Set(c.Sender().ID, conv)
+		return c.Edit("Enter the balance threshold in BDT (e.g. 200):", keyboards.CancelOnlyMenu())
+	default:
+		return c.Respond(&tele.CallbackResponse{Text: "Nothing to skip here."})
+	}
+}
+
+func (h *Handlers) OnNotifyMode(c tele.Context) error {
+	conv, ok := h.state.Get(c.Sender().ID)
+	if !ok || conv.Step != state.StepAddMode {
+		return c.Edit("Session expired. Please start over.", keyboards.MainMenu())
+	}
+	conv.Draft.NotifyMode = c.Data()
+	conv.Step = state.StepAddConfirm
+	h.state.Set(c.Sender().ID, conv)
+
+	d := conv.Draft
+	accountDisplay := d.AccountNumber
+	if accountDisplay == "" {
+		accountDisplay = "(not provided)"
+	}
+	nicknameDisplay := d.Nickname
+	if nicknameDisplay == "" {
+		nicknameDisplay = "(none)"
+	}
+	summary := fmt.Sprintf(
+		"📋 *Meter Summary*\n\n"+
+			"Provider: %s\n"+
+			"Meter #: %s\n"+
+			"Account #: %s\n"+
+			"Nickname: %s\n"+
+			"Threshold: %.0f BDT\n"+
+			"Alert mode: %s\n\n"+
+			"Confirm adding this meter?",
+		strings.ToUpper(d.Provider),
+		d.MeterNumber,
+		accountDisplay,
+		nicknameDisplay,
+		d.Threshold,
+		d.NotifyMode,
+	)
+	return c.Edit(summary, tele.ModeMarkdown, keyboards.ConfirmMenu())
+}
+
+func (h *Handlers) OnConfirm(c tele.Context) error {
+	conv, ok := h.state.Get(c.Sender().ID)
+	if !ok || conv.Step != state.StepAddConfirm {
+		return c.Edit("Session expired. Please start over.", keyboards.MainMenu())
+	}
+	if c.Data() != "yes" {
+		h.state.Clear(c.Sender().ID)
+		return c.Edit("Cancelled. What would you like to do?", keyboards.MainMenu())
+	}
+
+	ctx := context.Background()
+	user, err := h.getOrCreateUser(ctx, c.Sender())
+	if err != nil {
+		return err
+	}
+	d := conv.Draft
+	meter := &models.Meter{
+		UserID:             user.ID,
+		ProviderCode:       models.ProviderCode(d.Provider),
+		MeterNumber:        d.MeterNumber,
+		AccountNumber:      d.AccountNumber,
+		Nickname:           d.Nickname,
+		Threshold:          d.Threshold,
+		NotifyMode:         models.NotifyMode(d.NotifyMode),
+		FetchStatus:        models.FetchStatusPending,
+		NotificationStatus: models.NStatusNotNeeded,
+	}
+	if err := h.meterRepo.Create(ctx, meter); err != nil {
+		h.state.Clear(c.Sender().ID)
+		_ = c.Edit("❌ Something went wrong. Please try again.", keyboards.MainMenu())
+		return fmt.Errorf("create meter: %w", err)
+	}
+	h.state.Clear(c.Sender().ID)
+	name := d.MeterNumber
+	if d.Nickname != "" {
+		name = d.Nickname
+	}
+	return c.Edit(
+		fmt.Sprintf("✅ Meter *%s* added! You'll be notified when the balance drops below *%.0f BDT*.", name, d.Threshold),
+		tele.ModeMarkdown,
+		keyboards.MainMenu(),
+	)
+}
+
+func (h *Handlers) handleAddNumber(c tele.Context, conv state.Conversation) error {
+	num := strings.TrimSpace(c.Text())
+	if num == "" || len(num) > 20 {
+		return c.Send("Please enter a valid meter number (up to 20 characters):", keyboards.CancelOnlyMenu())
+	}
+	conv.Draft.MeterNumber = num
+	conv.Step = state.StepAddAccount
+	h.state.Set(c.Sender().ID, conv)
+	return c.Send(
+		fmt.Sprintf("✅ Meter #: *%s*\n\nEnter the account number:", num),
+		tele.ModeMarkdown,
+		keyboards.SkipOrCancelMenu(),
+	)
+}
+
+func (h *Handlers) handleAddAccount(c tele.Context, conv state.Conversation) error {
+	num := strings.TrimSpace(c.Text())
+	if len(num) > 20 {
+		return c.Send("Account number must be 20 characters or less:", keyboards.SkipOrCancelMenu())
+	}
+	conv.Draft.AccountNumber = num
+	conv.Step = state.StepAddNickname
+	h.state.Set(c.Sender().ID, conv)
+	return c.Send("Enter a nickname for this meter (optional):", keyboards.SkipOrCancelMenu())
+}
+
+func (h *Handlers) handleAddNickname(c tele.Context, conv state.Conversation) error {
+	name := strings.TrimSpace(c.Text())
+	if len(name) > 30 {
+		return c.Send("Nickname must be 30 characters or less:", keyboards.SkipOrCancelMenu())
+	}
+	conv.Draft.Nickname = name
+	conv.Step = state.StepAddThreshold
+	h.state.Set(c.Sender().ID, conv)
+	return c.Send("Enter the balance threshold in BDT (e.g. 200):", keyboards.CancelOnlyMenu())
+}
+
+func (h *Handlers) handleAddThreshold(c tele.Context, conv state.Conversation) error {
+	val, err := strconv.ParseFloat(strings.TrimSpace(c.Text()), 64)
+	if err != nil || val <= 0 {
+		return c.Send("Please enter a valid positive number (e.g. 200):", keyboards.CancelOnlyMenu())
+	}
+	conv.Draft.Threshold = val
+	conv.Step = state.StepAddMode
+	h.state.Set(c.Sender().ID, conv)
+	return c.Send(
+		fmt.Sprintf("✅ Threshold: *%.0f BDT*\n\nSelect notification mode:", val),
+		tele.ModeMarkdown,
+		keyboards.NotifyModeMenu(),
+	)
+}

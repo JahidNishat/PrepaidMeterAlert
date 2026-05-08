@@ -12,6 +12,7 @@ import (
 	"github.com/m4hi2/MeterAlertBot/internal/database"
 	"github.com/m4hi2/MeterAlertBot/internal/database/repo"
 	"github.com/m4hi2/MeterAlertBot/internal/telemetry"
+	"github.com/m4hi2/MeterAlertBot/internal/tgbot"
 	"github.com/muesli/coral"
 )
 
@@ -58,12 +59,18 @@ func runServe(cmd *coral.Command, _ []string) error {
 	}
 	db.AddQueryHook(bunHook)
 
-	_ = repo.NewUserRepo(db)
-	_ = repo.NewMeterRepo(db)
-	_ = repo.NewProviderRepo(db)
+	userRepo := repo.NewUserRepo(db)
+	meterRepo := repo.NewMeterRepo(db)
+	providerRepo := repo.NewProviderRepo(db)
 	_ = repo.NewNotificationLogRepo(db)
 
+	bot, err := tgbot.New(cfg.Telegram, userRepo, meterRepo, providerRepo)
+	if err != nil {
+		return err
+	}
+
 	slog.InfoContext(ctx, "meterbot started")
+	go bot.Start(ctx)
 
 	<-ctx.Done()
 	slog.Info("shutting down")
