@@ -34,10 +34,10 @@ func (h *Handlers) OnProvider(c tele.Context) error {
 		return c.Edit("Session expired. Please start over.", keyboards.MainMenu())
 	}
 	conv.Draft.Provider = c.Data()
-	conv.Step = state.StepAddNumber
+	conv.Step = state.StepAddAccount
 	h.state.Set(c.Sender().ID, conv)
 	return c.Edit(
-		fmt.Sprintf("✅ Provider: *%s*\n\nEnter your meter number:", strings.ToUpper(c.Data())),
+		fmt.Sprintf("✅ Provider: *%s*\n\nEnter your account number:", strings.ToUpper(c.Data())),
 		tele.ModeMarkdown,
 		keyboards.CancelOnlyMenu(),
 	)
@@ -49,8 +49,8 @@ func (h *Handlers) OnSkip(c tele.Context) error {
 		return c.Edit("Session expired. Please start over.", keyboards.MainMenu())
 	}
 	switch conv.Step {
-	case state.StepAddAccount:
-		conv.Draft.AccountNumber = ""
+	case state.StepAddNumber:
+		conv.Draft.MeterNumber = ""
 		conv.Step = state.StepAddNickname
 		h.state.Set(c.Sender().ID, conv)
 		return c.Edit("Enter a nickname for this meter (optional):", keyboards.SkipOrCancelMenu())
@@ -74,9 +74,9 @@ func (h *Handlers) OnNotifyMode(c tele.Context) error {
 	h.state.Set(c.Sender().ID, conv)
 
 	d := conv.Draft
-	accountDisplay := d.AccountNumber
-	if accountDisplay == "" {
-		accountDisplay = "(not provided)"
+	meterDisplay := d.MeterNumber
+	if meterDisplay == "" {
+		meterDisplay = "(not provided)"
 	}
 	nicknameDisplay := d.Nickname
 	if nicknameDisplay == "" {
@@ -85,15 +85,15 @@ func (h *Handlers) OnNotifyMode(c tele.Context) error {
 	summary := fmt.Sprintf(
 		"📋 *Meter Summary*\n\n"+
 			"Provider: %s\n"+
-			"Meter #: %s\n"+
 			"Account #: %s\n"+
+			"Meter #: %s\n"+
 			"Nickname: %s\n"+
 			"Threshold: %.0f BDT\n"+
 			"Alert mode: %s\n\n"+
 			"Confirm adding this meter?",
 		strings.ToUpper(d.Provider),
-		d.MeterNumber,
-		accountDisplay,
+		d.AccountNumber,
+		meterDisplay,
 		nicknameDisplay,
 		d.Threshold,
 		d.NotifyMode,
@@ -134,7 +134,10 @@ func (h *Handlers) OnConfirm(c tele.Context) error {
 		return fmt.Errorf("create meter: %w", err)
 	}
 	h.state.Clear(c.Sender().ID)
-	name := d.MeterNumber
+	name := d.AccountNumber
+	if d.MeterNumber != "" {
+		name = d.MeterNumber
+	}
 	if d.Nickname != "" {
 		name = d.Nickname
 	}
@@ -145,27 +148,27 @@ func (h *Handlers) OnConfirm(c tele.Context) error {
 	)
 }
 
-func (h *Handlers) handleAddNumber(c tele.Context, conv state.Conversation) error {
+func (h *Handlers) handleAddAccount(c tele.Context, conv state.Conversation) error {
 	num := strings.TrimSpace(c.Text())
 	if num == "" || len(num) > 20 {
-		return c.Send("Please enter a valid meter number (up to 20 characters):", keyboards.CancelOnlyMenu())
+		return c.Send("Please enter a valid account number (up to 20 characters):", keyboards.CancelOnlyMenu())
 	}
-	conv.Draft.MeterNumber = num
-	conv.Step = state.StepAddAccount
+	conv.Draft.AccountNumber = num
+	conv.Step = state.StepAddNumber
 	h.state.Set(c.Sender().ID, conv)
 	return c.Send(
-		fmt.Sprintf("✅ Meter #: *%s*\n\nEnter the account number:", num),
+		fmt.Sprintf("✅ Account #: *%s*\n\nEnter your meter number (optional):", num),
 		tele.ModeMarkdown,
 		keyboards.SkipOrCancelMenu(),
 	)
 }
 
-func (h *Handlers) handleAddAccount(c tele.Context, conv state.Conversation) error {
+func (h *Handlers) handleAddNumber(c tele.Context, conv state.Conversation) error {
 	num := strings.TrimSpace(c.Text())
 	if len(num) > 20 {
-		return c.Send("Account number must be 20 characters or less:", keyboards.SkipOrCancelMenu())
+		return c.Send("Meter number must be 20 characters or less:", keyboards.SkipOrCancelMenu())
 	}
-	conv.Draft.AccountNumber = num
+	conv.Draft.MeterNumber = num
 	conv.Step = state.StepAddNickname
 	h.state.Set(c.Sender().ID, conv)
 	return c.Send("Enter a nickname for this meter (optional):", keyboards.SkipOrCancelMenu())

@@ -122,10 +122,14 @@ func (h *Handlers) OnMeterDeleteConfirm(c tele.Context) error {
 
 func meterLabel(m *models.Meter) string {
 	provider := strings.ToUpper(string(m.ProviderCode))
-	if m.Nickname != "" {
-		return fmt.Sprintf("%s - %s (%.0f BDT)", provider, m.Nickname, m.Balance)
+	name := m.AccountNumber
+	if m.MeterNumber != "" {
+		name = m.MeterNumber
 	}
-	return fmt.Sprintf("%s - %s (%.0f BDT)", provider, m.MeterNumber, m.Balance)
+	if m.Nickname != "" {
+		name = m.Nickname
+	}
+	return fmt.Sprintf("%s - %s (%.0f BDT)", provider, name, m.Balance)
 }
 
 func meterDetail(m *models.Meter) string {
@@ -134,9 +138,9 @@ func meterDetail(m *models.Meter) string {
 	if m.LastFetchAt != nil {
 		lastChecked = m.LastFetchAt.Format("02 Jan 2006 15:04")
 	}
-	accountDisplay := m.AccountNumber
-	if accountDisplay == "" {
-		accountDisplay = "(not provided)"
+	meterDisplay := m.MeterNumber
+	if meterDisplay == "" {
+		meterDisplay = "(not provided)"
 	}
 	nicknameDisplay := m.Nickname
 	if nicknameDisplay == "" {
@@ -144,16 +148,16 @@ func meterDetail(m *models.Meter) string {
 	}
 	return fmt.Sprintf(
 		"⚡ *%s Meter*\n━━━━━━━━━━━━━━\n"+
-			"Meter #: %s\n"+
 			"Account #: %s\n"+
+			"Meter #: %s\n"+
 			"Nickname: %s\n"+
 			"Balance: *%.2f BDT*\n"+
 			"Threshold: %.0f BDT\n"+
 			"Alert mode: %s\n"+
 			"Last checked: %s",
 		provider,
-		m.MeterNumber,
-		accountDisplay,
+		m.AccountNumber,
+		meterDisplay,
 		nicknameDisplay,
 		m.Balance,
 		m.Threshold,
