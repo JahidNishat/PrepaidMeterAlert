@@ -54,7 +54,7 @@ func (s *Service) GetBalance(ctx context.Context, id datasources.Identifier) (da
 		return datasources.Balance{}, fmt.Errorf("get balance: %w", err)
 	}
 
-	if resp.Code != http.StatusOK {
+	if resp.Code != http.StatusOK || resp.Data.ReadingTime == "" {
 		return datasources.Balance{}, fmt.Errorf("get balance: upstream code %d: %s", resp.Code, resp.Desc)
 	}
 
