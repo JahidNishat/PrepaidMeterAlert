@@ -25,8 +25,8 @@ jobs:
         run: |
           echo "$SSH_KEY" > /tmp/deploy_key && chmod 600 /tmp/deploy_key
           scp -i /tmp/deploy_key -o StrictHostKeyChecking=no \
-            meterbot deploy@$VPS_HOST:/opt/meterbot/meterbot.new
+            meterbot deploy@$VPS_HOST:/tmp/meterbot.new
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no deploy@$VPS_HOST \
-            "sudo mv /opt/meterbot/meterbot.new /opt/meterbot/meterbot && \
+            "sudo mv /tmp/meterbot.new /opt/meterbot/meterbot && \
              sudo chmod +x /opt/meterbot/meterbot && \
              sudo systemctl restart meterbot-serve"
