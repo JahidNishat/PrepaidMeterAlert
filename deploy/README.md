@@ -214,7 +214,7 @@ Copy the three service files from this directory to `/etc/systemd/system/`:
 sudo cp meterbot-serve.service meterbot-alert.service meterbot-alert.timer \
   /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable meterbot-serve meterbot-alert.timer
+sudo systemctl enable --now meterbot-serve meterbot-alert.timer
 ```
 
 ### 10. Migration wrapper script
