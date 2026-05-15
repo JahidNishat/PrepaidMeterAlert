@@ -81,7 +81,7 @@ func Load() *Config {
 			RateLimit:  parseFloat(getEnv("MA_NESCO_RATE_LIMIT", "2")),
 		},
 		Telemetry: TelemetryConfig{
-			Enabled:      parseBool(getEnv("MA_OTEL_ENABLED", "true")),
+			Enabled:      parseBool(getEnv("MA_OTEL_ENABLED", "false")),
 			OTLPEndpoint: getEnv("MA_OTLP_ENDPOINT", "localhost:4317"),
 			ServiceName:  getEnv("MA_SERVICE_NAME", "meterbot"),
 			Environment:  getEnv("MA_ENVIRONMENT", "development"),
