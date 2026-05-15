@@ -1,5 +1,7 @@
 # PrepaidMeter Alert Bot
 
+<img src="icon/meteralert-icon.png" alt="Project icon" width="150" />
+
 A Telegram bot that monitors your Bangladesh prepaid electricity meter balance and alerts you when it drops below a threshold you set.
 
 [Try it now → @BDPrepaidMeterBot](https://t.me/BDPrepaidMeterBot)
