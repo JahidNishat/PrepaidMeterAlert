@@ -23,6 +23,7 @@ type ClientConfig struct {
 	Timeout    time.Duration
 	Retry      int
 	RetryDelay time.Duration
+	Jar        http.CookieJar
 }
 
 type Client struct {
@@ -51,13 +52,18 @@ func NewClient(cfg *ClientConfig) *Client {
 		metric.WithDescription("Number of requests that ultimately failed"),
 	)
 
+	httpClient := &http.Client{
+		Timeout:   cfg.Timeout,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+	if cfg.Jar != nil {
+		httpClient.Jar = cfg.Jar
+	}
+
 	return &Client{
 		config: cfg,
 		// otelhttp.NewTransport wraps each attempt in a child span automatically.
-		client: &http.Client{
-			Timeout:   cfg.Timeout,
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
-		},
+		client:      httpClient,
 		tracer:      otel.Tracer("meterbot/datasources"),
 		reqDuration: reqDuration,
 		retries:     retries,
@@ -131,6 +137,61 @@ func (c *Client) Do(ctx context.Context, method, path string, headers http.Heade
 		c.errors.Add(ctx, 1, metric.WithAttributes(attrs...))
 	}
 	return lastErr
+}
+
+func (c *Client) DoRaw(ctx context.Context, method string, path string, headers http.Header, body []byte) (*http.Response, error) {
+	url := c.config.BasePath + path
+
+	attempts := max(c.config.Retry, 1)
+	var lastErr error
+
+	for i := range attempts {
+		if i > 0 && c.config.RetryDelay > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(c.config.RetryDelay):
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build raw request: %w", err)
+		}
+
+		if headers != nil {
+			req.Header = headers.Clone()
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return resp, nil
+		}
+
+		b, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if readErr != nil {
+			lastErr = fmt.Errorf("read error response: %w", readErr)
+		} else {
+			lastErr = fmt.Errorf(
+				"upstream %d: %s",
+				resp.StatusCode,
+				string(bytes.TrimSpace(b)),
+			)
+		}
+
+		if !isTransient(resp.StatusCode) {
+			break
+		}
+	}
+
+	return nil, lastErr
 }
 
 func buildRequest(ctx context.Context, method, url string, headers http.Header, body any) (*http.Request, error) {
