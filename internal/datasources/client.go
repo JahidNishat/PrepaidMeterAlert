@@ -71,21 +71,21 @@ func NewClient(cfg *ClientConfig) *Client {
 	}
 }
 
-// Do executes an HTTP request against the client's base path, retrying on
-// transient failures (429, 502, 503, 504). The response body is JSON-decoded into dst.
-// headers are merged on top of the default Accept/Content-Type headers; pass nil for none.
-func (c *Client) Do(ctx context.Context, method, path string, headers http.Header, body, dst any) error {
+func (c *Client) do(ctx context.Context, method, path string, headers http.Header, body, dst any,
+	buildReq func(ctx context.Context, method, url string, headers http.Header, body any) (*http.Request, error),
+	handleResp func(ctx context.Context, resp *http.Response, dst any) error,
+) error {
 	url := c.config.BasePath + path
 	start := time.Now()
 
 	attrs := []attribute.KeyValue{
 		attribute.String("http.method", method),
 		attribute.String("datasource.base", c.config.BasePath),
+		attribute.String("http.url", url),
 	}
 	ctx, span := c.tracer.Start(ctx, "datasource.request",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(attrs...),
-		trace.WithAttributes(attribute.String("http.url", url)),
 	)
 	defer func() {
 		elapsed := float64(time.Since(start).Milliseconds())
@@ -94,8 +94,8 @@ func (c *Client) Do(ctx context.Context, method, path string, headers http.Heade
 	}()
 
 	attempts := max(c.config.Retry, 1)
-
 	var lastErr error
+
 	for i := range attempts {
 		if i > 0 {
 			c.retries.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -108,7 +108,7 @@ func (c *Client) Do(ctx context.Context, method, path string, headers http.Heade
 			}
 		}
 
-		req, err := buildRequest(ctx, method, url, headers, body)
+		req, err := buildReq(ctx, method, url, headers, body)
 		if err != nil {
 			return err
 		}
@@ -122,10 +122,10 @@ func (c *Client) Do(ctx context.Context, method, path string, headers http.Heade
 			continue
 		}
 
-		status := resp.StatusCode
-		lastErr = readResponse(ctx, resp, dst)
-		if isTransient(status) {
-			slog.WarnContext(ctx, "transient response, retrying", "method", method, "url", url, "status", status, "attempt", i+1)
+		lastErr = handleResp(ctx, resp, dst)
+
+		if isTransient(resp.StatusCode) {
+			slog.WarnContext(ctx, "transient response, retrying", "method", method, "url", url, "status", resp.StatusCode, "attempt", i+1)
 		} else {
 			break
 		}
@@ -139,59 +139,42 @@ func (c *Client) Do(ctx context.Context, method, path string, headers http.Heade
 	return lastErr
 }
 
-func (c *Client) DoRaw(ctx context.Context, method string, path string, headers http.Header, body []byte) (*http.Response, error) {
-	url := c.config.BasePath + path
+// Do executes a JSON-encoded HTTP request.
+func (c *Client) Do(ctx context.Context, method, path string, headers http.Header, body, dst any) error {
+	return c.do(ctx, method, path, headers, body, dst, buildRequest, readResponse)
+}
 
-	attempts := max(c.config.Retry, 1)
-	var lastErr error
-
-	for i := range attempts {
-		if i > 0 && c.config.RetryDelay > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(c.config.RetryDelay):
+// DoRaw executes a raw byte request and returns the raw *http.Response.
+func (c *Client) DoRaw(ctx context.Context, method, path string, headers http.Header, body []byte) (*http.Response, error) {
+	var outResp *http.Response
+	err := c.do(ctx, method, path, headers, body, nil,
+		func(ctx context.Context, method, url string, headers http.Header, body any) (*http.Request, error) {
+			b := body.([]byte)
+			req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(b))
+			if err != nil {
+				return nil, fmt.Errorf("build raw request: %w", err)
 			}
-		}
+			if headers != nil {
+				req.Header = headers.Clone()
+			}
+			return req, nil
+		},
+		func(ctx context.Context, resp *http.Response, dst any) error {
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				outResp = resp
+				return nil
+			}
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("build raw request: %w", err)
-		}
+			b, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
 
-		if headers != nil {
-			req.Header = headers.Clone()
-		}
-
-		resp, err := c.client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return resp, nil
-		}
-
-		b, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if readErr != nil {
-			lastErr = fmt.Errorf("read error response: %w", readErr)
-		} else {
-			lastErr = fmt.Errorf(
-				"upstream %d: %s",
-				resp.StatusCode,
-				string(bytes.TrimSpace(b)),
-			)
-		}
-
-		if !isTransient(resp.StatusCode) {
-			break
-		}
-	}
-
-	return nil, lastErr
+			if readErr != nil {
+				return fmt.Errorf("read error response: %w", readErr)
+			}
+			return fmt.Errorf("upstream %d: %s", resp.StatusCode, string(bytes.TrimSpace(b)))
+		},
+	)
+	return outResp, err
 }
 
 func buildRequest(ctx context.Context, method, url string, headers http.Header, body any) (*http.Request, error) {
